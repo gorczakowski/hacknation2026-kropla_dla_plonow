@@ -65,8 +65,7 @@ export function ParcelSearch({ selectedIds, onPick }: Props) {
         </button>
       </form>
       <p id={hintId} className="hint">
-        Wpisz identyfikator działki (np. <span className="code">040308_5.0004.26212/4</span>), nazwę obrębu
-        i numer albo kliknij działkę na mapie.
+        Wyszukaj działkę (Identyfikatorem lub nazwą i numerem obrębu), albo wyszukaj na mapie
       </p>
 
       <div aria-live="polite">

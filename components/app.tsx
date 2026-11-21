@@ -203,9 +203,9 @@ export function App() {
             />
           </li>
 
-          <li className="step" data-done={crop !== ""}>
+          <li className="step">
             <h2 className="step__title">
-              <StepMark n={2} done={crop !== ""} />
+              <StepMark n={2} />
               <label htmlFor={cropId}>Uprawa</label>
             </h2>
             <select
@@ -223,12 +223,12 @@ export function App() {
                 </option>
               ))}
             </select>
-            <p className="hint">Jeśli uprawiasz kilka roślin, wybierz tę, która najbardziej cierpi z braku wody.</p>
+            <p className="hint">W przypadku więcej niż jednego rodzaju plonu, wybierz najbardziej poszkodowany suszą</p>
           </li>
 
-          <li className="step" data-done={date !== ""}>
+          <li className="step">
             <h2 className="step__title">
-              <StepMark n={3} done={date !== ""} />
+              <StepMark n={3} />
               <label htmlFor={dateId}>Dzień analizy</label>
             </h2>
             <div className="date-row">
@@ -310,7 +310,7 @@ export function App() {
   );
 }
 
-function StepMark({ n, done }: { n: number; done: boolean }) {
+function StepMark({ n, done = false }: { n: number; done?: boolean }) {
   return (
     <span className="step__mark" aria-hidden="true">
       {done ? (
