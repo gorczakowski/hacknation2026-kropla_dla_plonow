@@ -1,0 +1,13 @@
+# Open-Meteo forwarder for the Zatrzymaj wodę app. Deploy:
+#   npx wrangler deploy                      (from this folder)
+#   npx wrangler secret put PROXY_KEY        (any long random string)
+# then in the app's .env.local:
+#   OPEN_METEO_PROXY=https://<worker>.workers.dev/<PROXY_KEY>
+name = "zatrzymaj-wode-open-meteo"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[vars]
+# After this moment the Worker answers 410 and the app falls back to NASA POWER.
+EXPIRES_AT = "2026-12-15T23:59:59Z"

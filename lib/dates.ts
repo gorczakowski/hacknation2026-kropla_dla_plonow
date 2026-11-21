@@ -23,6 +23,29 @@ export function isValidAnalysisDate(value: unknown, today = todayInPoland()): va
   return value >= earliestAnalysisDate(today) && value <= today;
 }
 
+/** YYYY-MM-DD plus n days (n may be negative). */
+export function addDays(value: string, n: number): string {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + n);
+  return date.toISOString().slice(0, 10);
+}
+
+/** The same calendar day k years later (k may be negative); 29 Feb becomes 28 Feb. */
+export function shiftYears(value: string, k: number): string {
+  const [y, m, d] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(y + k, m - 1, d));
+  if (date.getUTCMonth() !== m - 1) date.setUTCDate(0);
+  return date.toISOString().slice(0, 10);
+}
+
+export function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
+export function minDate(a: string, b: string) {
+  return a < b ? a : b;
+}
+
 export function formatDatePl(value: string) {
   return new Intl.DateTimeFormat("pl-PL", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(
     new Date(`${value}T00:00:00Z`)

@@ -3,6 +3,8 @@
  * Copernicus...). Good enough for a single Node process; swap for Redis when
  * the app runs on more than one instance.
  */
+import { upstreamFetch } from "./http";
+
 type Entry<T> = { value: T; expires: number };
 
 export function createCache<T>({ ttlMs, maxEntries }: { ttlMs: number; maxEntries: number }) {
@@ -46,11 +48,12 @@ export function cached<T>(
   });
 }
 
+/** fetch with a timeout, through the configured proxy if any (see upstreamUrl). */
 export async function fetchWithTimeout(url: string | URL, timeoutMs: number, init: RequestInit = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await upstreamFetch(String(url), { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }

@@ -197,6 +197,21 @@ export function App() {
     [parcels, removeParcel, flash]
   );
 
+  const [pdf, setPdf] = useState<"idle" | "working" | "error">("idle");
+  useEffect(() => setPdf("idle"), [analysis]);
+
+  async function downloadPdf(response: Exclude<AnalysisResponse, { error: string }>) {
+    setPdf("working");
+    try {
+      // jsPDF and the fonts load only when the farmer asks for the file.
+      const { downloadDataSummary } = await import("./data-summary-pdf");
+      await downloadDataSummary(response);
+      setPdf("idle");
+    } catch {
+      setPdf("error");
+    }
+  }
+
   async function analyze() {
     setAnalysis({ status: "running" });
     try {
@@ -312,22 +327,44 @@ export function App() {
         </div>
 
         <div aria-live="polite" ref={resultRef} className="result-slot">
+          {analysis.status === "running" && (
+            <p className="hint">Pobieram dane pogodowe, glebowe, satelitarne i mapowe. Zwykle trwa to 5–20 sekund.</p>
+          )}
           {analysis.status === "error" && <p className="notice notice--error">{analysis.message}</p>}
           {analysis.status === "done" && (
             <section className="preview" aria-label="Wynik analizy">
-              <h2 className="preview__title">Analiza w przygotowaniu</h2>
+              <h2 className="preview__title">Dane zebrane</h2>
               <p className="preview__lede">
-                Granice działek pobrano z ewidencji. Ocena wilgotności i rekomendacje pojawią się tu, gdy
-                moduły danych będą gotowe.
+                Pobierz zestawienie danych dla {parcelsAccusative(analysis.response.results.length)}: pogoda i bilans
+                wodny z 10 lat, gleba, zdjęcia satelitarne, teren, rowy i wody, użytkowanie terenu. Ocena i
+                rekomendacje pojawią się w kolejnej wersji.
               </p>
-              <ul className="preview__modules">
-                {analysis.response.results[0]?.modules.map(m => (
-                  <li key={m.module} data-status={m.status}>
-                    <span>{MODULE_LABELS[m.module]}</span>
-                    <span className="preview__status">{STATUS_LABEL[m.status]}</span>
-                  </li>
-                ))}
-              </ul>
+              <button
+                type="button"
+                className="button button--secondary"
+                disabled={pdf === "working"}
+                onClick={() => downloadPdf(analysis.response)}
+              >
+                {pdf === "working" ? "Przygotowuję PDF…" : "Pobierz zestawienie (PDF)"}
+              </button>
+              {pdf === "error" && (
+                <p className="notice notice--error">Nie udało się utworzyć pliku PDF. Spróbuj ponownie.</p>
+              )}
+              {analysis.response.results.map(r => (
+                <div key={r.parcel.properties.id}>
+                  {analysis.response.results.length > 1 && (
+                    <h3 className="preview__parcel">Działka {r.parcel.properties.number}</h3>
+                  )}
+                  <ul className="preview__modules">
+                    {r.modules.map(m => (
+                      <li key={m.module} data-status={m.status}>
+                        <span>{MODULE_LABELS[m.module]}</span>
+                        <span className="preview__status">{STATUS_LABEL[m.status]}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </section>
           )}
         </div>

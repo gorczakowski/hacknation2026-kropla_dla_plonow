@@ -31,7 +31,14 @@ const RAPESEED = "#F2C21B";
 const AREA_FADE_MS = 800;
 const INK = "#1F2A24";
 
-const KIEG_URL = "https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow";
+/**
+ * GUGiK WMS tiles come through our /api/wms route, so they use UPSTREAM_PROXY
+ * when it is set (GUGiK throttles shared venue IPs). Absolute URLs, because
+ * MapLibre fetches tiles from its worker.
+ */
+const ORIGIN = typeof window === "undefined" ? "" : window.location.origin;
+const ORTO_URL = `${ORIGIN}/api/wms/orto`;
+const KIEG_URL = `${ORIGIN}/api/wms/kieg`;
 /** KIEG (MapServer) draws nothing at scales smaller than about 1:5000; stay safely under. */
 const KIEG_MAX_SCALE = 4200;
 
@@ -87,10 +94,7 @@ const STYLE: StyleSpecification = {
     orto: {
       type: "raster",
       tiles: [
-        wms(
-          "https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/StandardResolution",
-          "LAYERS=Raster&FORMAT=image/jpeg"
-        )
+        wms(ORTO_URL, "LAYERS=Raster&FORMAT=image/jpeg")
       ],
       tileSize: 512,
       maxzoom: 19,
