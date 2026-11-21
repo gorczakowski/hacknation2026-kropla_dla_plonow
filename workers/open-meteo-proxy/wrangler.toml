@@ -7,3 +7,7 @@ name = "zatrzymaj-wode-open-meteo"
 main = "src/index.js"
 compatibility_date = "2026-11-01"
 workers_dev = true
+
+[vars]
+# After this moment the Worker answers 410 and the app falls back to NASA POWER.
+EXPIRES_AT = "2026-12-15T23:59:59Z"

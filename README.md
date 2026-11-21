@@ -48,6 +48,11 @@ npx wrangler secret put PROXY_KEY     # a long random string
 # .env.local: OPEN_METEO_PROXY=https://zatrzymaj-wode-open-meteo.<account>.workers.dev/<PROXY_KEY>
 ```
 
+For the hackathon jury the repository ships a committed [.env](.env) that points
+`OPEN_METEO_PROXY` at our deployed Worker, so the app works without setup. That key stops
+working on 15.12.2026 (`EXPIRES_AT` in [wrangler.toml](workers/open-meteo-proxy/wrangler.toml));
+after that the Worker answers 410 and the app falls back to NASA POWER.
+
 The app also requests ERA5 one calendar year at a time, so finished years are cached for a
 year on disk and in the Worker, and other analysis days for the same grid cell reuse them.
 

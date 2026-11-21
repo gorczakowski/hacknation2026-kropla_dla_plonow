@@ -29,6 +29,8 @@ function cacheSeconds(target) {
 export default {
   async fetch(request, env, ctx) {
     if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
+    // The key is committed with the app for the hackathon jury; it stops working after EXPIRES_AT.
+    if (env.EXPIRES_AT && Date.now() > Date.parse(env.EXPIRES_AT)) return new Response("Expired", { status: 410 });
 
     const url = new URL(request.url);
     const prefix = `/${env.PROXY_KEY}/`;
