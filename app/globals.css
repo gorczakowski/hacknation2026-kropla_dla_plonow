@@ -131,16 +131,6 @@ select {
 
 .brand__mark {
   flex: none;
-  color: var(--ink);
-}
-
-.brand__water {
-  fill: var(--water);
-}
-
-.brand__water--low {
-  fill: var(--water);
-  opacity: 0.45;
 }
 
 .brand__name {

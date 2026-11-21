@@ -20,7 +20,8 @@ const mono = Atkinson_Hyperlegible_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Zatrzymaj wodę – ocena wody na działce",
+  title: "Kropla dla Plonów – ocena wody na działce",
+  icons: { icon: { url: "/logo.png?v=2", type: "image/png", sizes: "512x512" } },
   description:
     "Sprawdź sytuację wodną działki rolnej i dowiedz się, jak zatrzymać wodę w glebie i krajobrazie."
 };
