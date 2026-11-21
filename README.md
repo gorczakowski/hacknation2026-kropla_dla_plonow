@@ -90,6 +90,8 @@ so a selection can be shared or reopened as a link.
 | Parcel geometry, ids | [GUGiK ULDK](https://uldk.gugik.gov.pl/) | live | Public data, free of charge |
 | Orthophoto | [GUGiK ORTO WMS](https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/StandardResolution) | live | Public data, free of charge |
 | Parcel boundaries layer | [GUGiK KIEG WMS](https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow) | live | Public data, free of charge |
+
+KIEG only draws at scales of about 1:5000 or larger (zoom 16+). For zooms 13–15 the map lowers MapServer's `MAP_RESOLUTION` per tile (`kiegTransform` in [components/parcel-map.tsx](components/parcel-map.tsx)), so the service still draws 1-px lines; parcel numbers stay at zoom 16+.
 | Place names | [OpenFreeMap](https://openfreemap.org/) / OpenStreetMap | live | ODbL (data), free service |
 | Village / postcode search | [Photon](https://photon.komoot.io/) (komoot), OpenStreetMap data | live | ODbL (data); public API, fair use |
 | Precinct (obręb) outlines | [GUGiK ULDK](https://uldk.gugik.gov.pl/) `GetRegionByXY` | live | Public data, free of charge |

@@ -22,14 +22,33 @@ type Props = {
 };
 
 const POLAND: [number, number, number, number] = [14.07, 49.0, 24.15, 54.84];
-/** KIEG draws parcel lines only at large scales (about 1.2 m/px or finer). */
-const PARCELS_MIN_ZOOM = 16;
+/** Parcel lines from this zoom; see kiegTransform for how KIEG is made to draw them. */
+const PARCELS_MIN_ZOOM = 13;
 /** Below this, a click is too imprecise to mean one parcel. */
 const PICK_MIN_ZOOM = 13;
 
 const RAPESEED = "#F2C21B";
 const AREA_FADE_MS = 800;
 const INK = "#1F2A24";
+
+const KIEG_URL = "https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow";
+/** KIEG (MapServer) draws nothing at scales smaller than about 1:5000; stay safely under. */
+const KIEG_MAX_SCALE = 4200;
+
+/**
+ * KIEG computes the map scale from the requested metres per pixel and an assumed
+ * screen resolution (72 dpi), and returns an empty image above ~1:5000, which is
+ * zoom 16. Lowering MAP_RESOLUTION (a MapServer parameter) for larger tiles makes
+ * it draw at zooms 13–15 as well, still as crisp 1-px lines in a 512-px tile.
+ */
+function kiegTransform(url: string) {
+  if (!url.startsWith(KIEG_URL)) return undefined;
+  const bbox = new URL(url).searchParams.get("BBOX")?.split(",").map(Number);
+  if (!bbox || bbox.length !== 4) return undefined;
+  const metresPerPixel = (bbox[2] - bbox[0]) / 512;
+  const dpi = Math.floor((0.0254 * KIEG_MAX_SCALE) / metresPerPixel);
+  return dpi < 72 ? { url: `${url}&MAP_RESOLUTION=${Math.max(dpi, 1)}` } : undefined;
+}
 
 const wms = (base: string, params: string) =>
   `${base}?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=512&HEIGHT=512&${params}`;
@@ -80,10 +99,7 @@ const STYLE: StyleSpecification = {
     kieg: {
       type: "raster",
       tiles: [
-        wms(
-          "https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow",
-          "LAYERS=dzialki,numery_dzialek&FORMAT=image/png&TRANSPARENT=TRUE"
-        )
+        wms(KIEG_URL, "LAYERS=dzialki,numery_dzialek&FORMAT=image/png&TRANSPARENT=TRUE")
       ],
       tileSize: 512,
       minzoom: PARCELS_MIN_ZOOM,
@@ -117,8 +133,13 @@ const STYLE: StyleSpecification = {
       id: "kieg",
       type: "raster",
       source: "kieg",
-      // Turn GUGiK's thin blue lines near-white so they read on the orthophoto.
-      paint: { "raster-saturation": -1, "raster-brightness-min": 0.88, "raster-opacity": 0.9 }
+      // Turn GUGiK's thin blue lines near-white so they read on the orthophoto;
+      // softer when zoomed out, where village plots get dense.
+      paint: {
+        "raster-saturation": -1,
+        "raster-brightness-min": 0.88,
+        "raster-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0.55, 15, 0.8, 16, 0.9]
+      }
     },
     {
       id: "area-fill",
@@ -225,6 +246,7 @@ export function ParcelMap({ parcels, highlightedId, onHighlight, onPickAt, onPic
         ],
         maxZoom: 19,
         attributionControl: { compact: true },
+        transformRequest: kiegTransform,
         dragRotate: false,
         pitchWithRotate: false,
         touchPitch: false
@@ -346,11 +368,9 @@ export function ParcelMap({ parcels, highlightedId, onHighlight, onPickAt, onPic
   }, [area, ready]);
 
   const hint =
-    zoom < PICK_MIN_ZOOM
-      ? "Wyszukaj swoją miejscowość albo przybliż mapę."
-      : zoom < PARCELS_MIN_ZOOM
-        ? "Kliknij swoją działkę. Granice działek pojawią się po przybliżeniu."
-        : "Kliknij działkę, żeby ją dodać. Kliknij ponownie, żeby ją usunąć.";
+    zoom < Math.max(PICK_MIN_ZOOM, PARCELS_MIN_ZOOM)
+      ? "Wyszukaj swoją miejscowość albo przybliż mapę, żeby zobaczyć granice działek."
+      : "Kliknij działkę, żeby ją dodać. Kliknij ponownie, żeby ją usunąć.";
 
   return (
     <div className="map">
