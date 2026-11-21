@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, LayerSpecification, Map as MlMap, StyleSpecification } from "maplibre-gl";
-import type { ParcelFeature } from "@/lib/parcels/types";
+import type { ParcelFeature, PrecinctFeature } from "@/lib/parcels/types";
 
-export type MapFocus = { bbox: [number, number, number, number]; seq: number };
+export type MapFocus = { bbox: [number, number, number, number]; seq: number; maxZoom?: number };
 
 type Props = {
   parcels: ParcelFeature[];
@@ -15,6 +15,8 @@ type Props = {
   /** Click on a parcel that is already selected. */
   onPickSelected: (id: string) => void;
   focus: MapFocus | null;
+  /** Temporary outline of a precinct (village) after a place search. */
+  area: PrecinctFeature | null;
   /** Short status line shown over the map (loading, errors). */
   message: string | null;
 };
@@ -26,6 +28,7 @@ const PARCELS_MIN_ZOOM = 16;
 const PICK_MIN_ZOOM = 13;
 
 const RAPESEED = "#F2C21B";
+const AREA_FADE_MS = 800;
 const INK = "#1F2A24";
 
 const wms = (base: string, params: string) =>
@@ -92,6 +95,10 @@ const STYLE: StyleSpecification = {
       url: "https://tiles.openfreemap.org/planet",
       attribution: "© OpenStreetMap, OpenFreeMap"
     },
+    area: {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] }
+    },
     selected: {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -112,6 +119,35 @@ const STYLE: StyleSpecification = {
       source: "kieg",
       // Turn GUGiK's thin blue lines near-white so they read on the orthophoto.
       paint: { "raster-saturation": -1, "raster-brightness-min": 0.88, "raster-opacity": 0.9 }
+    },
+    {
+      id: "area-fill",
+      type: "fill",
+      source: "area",
+      paint: { "fill-color": "#FFFFFF", "fill-opacity": 0.1, "fill-opacity-transition": { duration: AREA_FADE_MS } }
+    },
+    {
+      id: "area-casing",
+      type: "line",
+      source: "area",
+      paint: {
+        "line-color": INK,
+        "line-width": 6,
+        "line-opacity": 0.5,
+        "line-opacity-transition": { duration: AREA_FADE_MS }
+      }
+    },
+    {
+      id: "area-line",
+      type: "line",
+      source: "area",
+      layout: { "line-join": "round" },
+      paint: {
+        "line-color": "#FFFFFF",
+        "line-width": 2.5,
+        "line-dasharray": [3, 2],
+        "line-opacity-transition": { duration: AREA_FADE_MS }
+      }
     },
     placeLayer("places-minor", ["village", "hamlet"], 11, [11, 12, 16, 16]),
     placeLayer("places-major", ["city", "town"], 5, [6, 12, 14, 19]),
@@ -159,7 +195,7 @@ function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export function ParcelMap({ parcels, highlightedId, onHighlight, onPickAt, onPickSelected, focus, message }: Props) {
+export function ParcelMap({ parcels, highlightedId, onHighlight, onPickAt, onPickSelected, focus, area, message }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const [ready, setReady] = useState(false);
@@ -285,13 +321,33 @@ export function ParcelMap({ parcels, highlightedId, onHighlight, onPickAt, onPic
         [w, s],
         [e, n]
       ],
-      { padding: 64, maxZoom: 17, duration: prefersReducedMotion() ? 0 : 900 }
+      { padding: 64, maxZoom: focus.maxZoom ?? 17, duration: prefersReducedMotion() ? 0 : 900 }
     );
   }, [focus, ready]);
 
+  // Precinct outline: shown at once, faded out when cleared.
+  useEffect(() => {
+    const map = mapRef.current;
+    const source = map?.getSource<GeoJSONSource>("area");
+    if (!map || !source) return;
+    const opacity = (fill: number, casing: number, line: number) => {
+      map.setPaintProperty("area-fill", "fill-opacity", fill);
+      map.setPaintProperty("area-casing", "line-opacity", casing);
+      map.setPaintProperty("area-line", "line-opacity", line);
+    };
+    if (area) {
+      source.setData(area);
+      opacity(0.1, 0.5, 1);
+      return;
+    }
+    opacity(0, 0, 0);
+    const timer = setTimeout(() => source.setData({ type: "FeatureCollection", features: [] }), AREA_FADE_MS);
+    return () => clearTimeout(timer);
+  }, [area, ready]);
+
   const hint =
     zoom < PICK_MIN_ZOOM
-      ? "Przybliż mapę do swojej miejscowości albo wyszukaj działkę po numerze."
+      ? "Wyszukaj swoją miejscowość albo przybliż mapę."
       : zoom < PARCELS_MIN_ZOOM
         ? "Kliknij swoją działkę. Granice działek pojawią się po przybliżeniu."
         : "Kliknij działkę, żeby ją dodać. Kliknij ponownie, żeby ją usunąć.";

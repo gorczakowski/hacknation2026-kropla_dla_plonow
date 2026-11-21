@@ -25,8 +25,10 @@ No API keys are needed yet.
 
 ```
 Browser (Next.js page)                         Server (Next.js route handlers)
-  map: GUGiK orthophoto + KIEG parcels (WMS)     GET  /api/parcels?q=… | ?lon=&lat=
-  search / click → selected parcels   ───────►        ULDK lookup, cached in memory
+  map: GUGiK orthophoto + KIEG parcels (WMS)     GET  /api/places?q=<village | postcode>
+  village / postcode search           ───────►        Photon (OSM), cached in memory
+  pick a village → precinct outline   ───────►   GET  /api/precincts?lon=&lat=   (ULDK obręb)
+  parcel search / click → selection   ───────►   GET  /api/parcels?q=… | ?lon=&lat=   (ULDK)
   crop + day → "Analizuj"             ───────►   POST /api/analyze {parcelIds, crop, date}
                                                       re-fetch parcels from ULDK
                                                       run data modules in parallel → envelopes
@@ -71,6 +73,13 @@ lib/crops.ts         crop groups (mirror IUNG drought monitoring)
 lib/dates.ts         analysis-day rules (today − 10 years … today, Europe/Warsaw)
 ```
 
+Village search: Photon matches names (prefixes, missing diacritics) among cities, towns,
+villages and hamlets in Poland. A full postcode (`88-150`, `88150`) finds the postcode area,
+then lists the places inside it, keeping those tagged with that postcode plus untagged ones
+inside the area, sorted alphabetically (up to 50). Picking a place zooms to it and outlines
+its cadastral precinct (obręb) for 12 s. In the countryside that is usually the village;
+larger towns are split into several precincts.
+
 The page state is mirrored in the URL (`?dzialki=<id>,<id>&uprawa=<crop>&data=<YYYY-MM-DD>`),
 so a selection can be shared or reopened as a link.
 
@@ -82,6 +91,8 @@ so a selection can be shared or reopened as a link.
 | Orthophoto | [GUGiK ORTO WMS](https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/StandardResolution) | live | Public data, free of charge |
 | Parcel boundaries layer | [GUGiK KIEG WMS](https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow) | live | Public data, free of charge |
 | Place names | [OpenFreeMap](https://openfreemap.org/) / OpenStreetMap | live | ODbL (data), free service |
+| Village / postcode search | [Photon](https://photon.komoot.io/) (komoot), OpenStreetMap data | live | ODbL (data); public API, fair use |
+| Precinct (obręb) outlines | [GUGiK ULDK](https://uldk.gugik.gov.pl/) `GetRegionByXY` | live | Public data, free of charge |
 
 ## Libraries
 

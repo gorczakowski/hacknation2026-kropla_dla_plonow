@@ -3,6 +3,7 @@
 import { useId, useState, type FormEvent } from "react";
 import type { ParcelFeature, ParcelsResponse } from "@/lib/parcels/types";
 import { formatArea } from "./format";
+import { revealOnSmallScreen } from "./reveal";
 
 type Props = {
   selectedIds: Set<string>;
@@ -44,10 +45,10 @@ export function ParcelSearch({ selectedIds, onPick }: Props) {
 
   return (
     <div className="search">
+      <label htmlFor={inputId} className="field-label">
+        Numer działki
+      </label>
       <form className="search__form" onSubmit={search} role="search">
-        <label htmlFor={inputId} className="visually-hidden">
-          Numer działki
-        </label>
         <input
           id={inputId}
           className="input search__input"
@@ -55,9 +56,10 @@ export function ParcelSearch({ selectedIds, onPick }: Props) {
           inputMode="text"
           autoComplete="off"
           spellCheck={false}
-          placeholder="np. Przyłubie 26212/4"
+          placeholder="np. Kobylniki 3/7"
           value={query}
           onChange={e => setQuery(e.target.value)}
+          onFocus={e => revealOnSmallScreen(e.currentTarget)}
           aria-describedby={hintId}
         />
         <button className="button button--secondary" type="submit" disabled={state.status === "loading"}>
@@ -65,8 +67,8 @@ export function ParcelSearch({ selectedIds, onPick }: Props) {
         </button>
       </form>
       <p id={hintId} className="hint">
-        Wpisz identyfikator działki (np. <span className="code">040308_5.0004.26212/4</span>), nazwę obrębu
-        i numer albo kliknij działkę na mapie.
+        Nazwa obrębu i numer albo pełny identyfikator, np.{" "}
+        <span className="code">040706_5.0020.3/7</span>.
       </p>
 
       <div aria-live="polite">

@@ -25,3 +25,18 @@ export type ParcelProps = {
 export type ParcelFeature = Feature<Polygon | MultiPolygon, ParcelProps>;
 
 export type ParcelsResponse = { parcels: ParcelFeature[] } | { error: string };
+
+/** A cadastral precinct (obręb ewidencyjny), usually one village in the countryside. */
+export type PrecinctProps = {
+  /** TERYT precinct id, e.g. 040706_5.0020 */
+  id: string;
+  name: string;
+  commune: string;
+  county: string;
+  voivodeship: string;
+  bbox: [number, number, number, number];
+};
+
+export type PrecinctFeature = Feature<Polygon | MultiPolygon, PrecinctProps>;
+
+export type PrecinctResponse = { precinct: PrecinctFeature | null } | { error: string };

@@ -5,10 +5,12 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { MODULE_LABELS, type AnalysisResponse, type DataStatus } from "@/lib/analysis/contract";
 import { CROPS, isCropId, type CropId } from "@/lib/crops";
 import { earliestAnalysisDate, isValidAnalysisDate, todayInPoland } from "@/lib/dates";
-import type { ParcelFeature, ParcelsResponse } from "@/lib/parcels/types";
+import type { ParcelFeature, ParcelsResponse, PrecinctFeature, PrecinctResponse } from "@/lib/parcels/types";
+import type { Place } from "@/lib/places/types";
 import { parcelsAccusative } from "./format";
 import type { MapFocus } from "./parcel-map";
 import { ParcelSearch } from "./parcel-search";
+import { PlaceSearch } from "./place-search";
 import { SelectedParcels } from "./selected-parcels";
 
 const ParcelMap = dynamic(() => import("./parcel-map").then(m => m.ParcelMap), {
@@ -21,6 +23,9 @@ type Analysis =
   | { status: "running" }
   | { status: "done"; response: Exclude<AnalysisResponse, { error: string }> }
   | { status: "error"; message: string };
+
+/** How long the village outline stays on the map after a place search. */
+const AREA_VISIBLE_MS = 12_000;
 
 const STATUS_LABEL: Record<DataStatus, string> = {
   ok: "pobrano",
@@ -36,6 +41,8 @@ export function App() {
   const [crop, setCrop] = useState<CropId | "">("");
   const [date, setDate] = useState(() => todayInPoland());
   const [mapMessage, setMapMessage] = useState<string | null>(null);
+  /** Precinct (village) outline shown for a while after a place search. */
+  const [area, setArea] = useState<PrecinctFeature | null>(null);
   const [analysis, setAnalysis] = useState<Analysis>({ status: "idle" });
   const today = useMemo(() => todayInPoland(), []);
   const cropId = useId();
@@ -64,6 +71,39 @@ export function App() {
   const focusOn = useCallback((p: ParcelFeature) => {
     setFocus(f => ({ bbox: p.properties.bbox, seq: (f?.seq ?? 0) + 1 }));
   }, []);
+
+  const areaTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const showArea = useCallback((precinct: PrecinctFeature | null) => {
+    clearTimeout(areaTimer.current);
+    setArea(precinct);
+    if (precinct) areaTimer.current = setTimeout(() => setArea(null), AREA_VISIBLE_MS);
+  }, []);
+
+  // Fly to the place at once, then fit to its precinct outline from ULDK.
+  const placeRequest = useRef(0);
+  const pickPlace = useCallback(
+    async (place: Place) => {
+      const seq = ++placeRequest.current;
+      showArea(null);
+      const d = 0.012;
+      const bbox = place.extent ?? [place.lon - d, place.lat - d, place.lon + d, place.lat + d];
+      setFocus(f => ({ bbox, seq: (f?.seq ?? 0) + 1, maxZoom: 14 }));
+      const fallback = `${place.name}: kliknij swoją działkę na mapie.`;
+      try {
+        const res = await fetch(`/api/precincts?lon=${place.lon.toFixed(6)}&lat=${place.lat.toFixed(6)}`);
+        const body = (await res.json()) as PrecinctResponse;
+        if (seq !== placeRequest.current) return;
+        if ("error" in body || !body.precinct) return flash(fallback, 5000);
+        const precinct = body.precinct;
+        showArea(precinct);
+        setFocus(f => ({ bbox: precinct.properties.bbox, seq: (f?.seq ?? 0) + 1, maxZoom: 15 }));
+        flash(`Obręb ${precinct.properties.name}, gm. ${precinct.properties.commune}. Kliknij swoją działkę.`, 6000);
+      } catch {
+        if (seq === placeRequest.current) flash(fallback, 5000);
+      }
+    },
+    [flash, showArea]
+  );
 
   const addParcel = useCallback(
     (p: ParcelFeature, { focus = true } = {}) => {
@@ -193,6 +233,7 @@ export function App() {
               <StepMark n={1} done={hasParcels} />
               Działka
             </h2>
+            <PlaceSearch onPick={pickPlace} />
             <ParcelSearch selectedIds={selectedIds} onPick={p => addParcel(p)} />
             <SelectedParcels
               parcels={parcels}
@@ -291,7 +332,7 @@ export function App() {
         </div>
 
         <footer className="panel__footer">
-          Dane: GUGiK (ortofotomapa, ewidencja gruntów, ULDK), OpenStreetMap. Prototyp na HackNation 2026.
+          Dane: GUGiK (ortofotomapa, ewidencja gruntów, ULDK), OpenStreetMap. Wyszukiwanie miejscowości: Photon (komoot). Prototyp na HackNation 2026.
         </footer>
       </main>
 
@@ -303,6 +344,7 @@ export function App() {
           onPickAt={pickAt}
           onPickSelected={pickSelected}
           focus={focus}
+          area={area}
           message={mapMessage}
         />
       </section>

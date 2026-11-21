@@ -337,6 +337,7 @@ select {
 .search {
   display: grid;
   gap: 8px;
+  scroll-margin-top: 12px;
 }
 
 .search__form {
@@ -404,6 +405,56 @@ select {
 .result__side {
   flex: none;
   font-variant-numeric: tabular-nums;
+}
+
+/* Place search: choosing a village moves the map, it does not select anything,
+   so its options use the neutral tint rather than the selection yellow. */
+.field-label {
+  font-size: var(--t-s);
+  font-weight: 700;
+}
+
+.search + .search {
+  margin-top: 10px;
+}
+
+.combo {
+  position: relative;
+}
+
+.combo__spinner {
+  position: absolute;
+  top: 50%;
+  right: 44px;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--water);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.results--places .result:hover,
+.results--places .result[data-active="true"] {
+  background: var(--muted-tint);
+}
+
+.results--places .result[data-active="true"] {
+  box-shadow: inset 3px 0 0 var(--water);
+}
+
+.results__caption {
+  padding: 8px 14px;
+  font-size: var(--t-xs);
+  color: var(--ink-2);
+  background: var(--paper);
 }
 
 /* ---------- Selected parcels ---------- */
