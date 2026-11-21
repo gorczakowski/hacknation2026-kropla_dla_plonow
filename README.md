@@ -1,0 +1,99 @@
+# Zatrzymaj wodę
+
+HackNation 2026, KOWR challenge "Zatrzymaj wodę, chroń plony". A web app for farmers: pick a
+cadastral parcel, the crop and a day, and get an assessment of the parcel's water situation over
+the last 10 years, the causes of any shortage, and data-backed retention, agrotechnical and
+irrigation recommendations.
+
+> Status: skeleton. Map, parcel search and selection, crop and date inputs, and the analysis API
+> with the module contract work. The data modules are stubs that report "brak danych".
+
+## Running
+
+Requires Node 22+.
+
+```sh
+npm install        # also copies the MapLibre worker to public/maplibre
+npm run dev        # http://localhost:3000
+npm run typecheck
+npm run build && npm start
+```
+
+No API keys are needed yet.
+
+## How it works
+
+```
+Browser (Next.js page)                         Server (Next.js route handlers)
+  map: GUGiK orthophoto + KIEG parcels (WMS)     GET  /api/parcels?q=… | ?lon=&lat=
+  search / click → selected parcels   ───────►        ULDK lookup, cached in memory
+  crop + day → "Analizuj"             ───────►   POST /api/analyze {parcelIds, crop, date}
+                                                      re-fetch parcels from ULDK
+                                                      run data modules in parallel → envelopes
+```
+
+A thin backend is deliberate:
+- Open-Meteo rate-limits per IP, and the event venue shares one.
+- GUGiK NMT WCS sends no CORS headers.
+- Copernicus needs an OAuth secret.
+- Caching makes repeat jury runs fast.
+
+### The module contract
+
+Each data source is a module in [lib/analysis/modules/](lib/analysis/modules/) that returns a
+`DataEnvelope` ([lib/analysis/contract.ts](lib/analysis/contract.ts)) with `status`
+(`ok | partial | missing | error`), `value`, `sources` (name, URL, licence, live or prepared),
+`fetchedAt`, `period`, `uncertainty` and plain-Polish `notes`. The report's sources, limitations
+and "brak danych" sections are generated from these envelopes. A module that throws or exceeds
+20 s becomes an `error` envelope, and the analysis still completes.
+
+All modules receive the analysis day `asOf` and must not use data after it. The jury tests
+historical days within the last 10 years.
+
+| Module | File | Planned source |
+|---|---|---|
+| Parcel | `parcel.ts` | GUGiK ULDK (working) |
+| Meteo | `meteo.ts` | Open-Meteo ERA5 / IMGW: P, T, ET0 FAO-56, climatic water balance |
+| Soil | `soil.ts` | SoilGrids, IUNG soil drought categories |
+| Satellite | `satellite.ts` | Copernicus Data Space Statistical API: NDVI/NDMI anomalies |
+| Terrain | `terrain.ts` | GUGiK NMT WCS: slope, depressions |
+| Hydro | `hydro.ts` | MPHP / BDOT10k: watercourses, ditches |
+| Drought | `drought.ts` | EDO CDI / soil moisture anomaly |
+
+### Structure
+
+```
+app/                 page, layout, styles, API routes (api/parcels, api/analyze)
+components/          map, search, selected parcels, app container
+lib/parcels/         ULDK client and parcel types
+lib/analysis/        module contract, runner, modules
+lib/crops.ts         crop groups (mirror IUNG drought monitoring)
+lib/dates.ts         analysis-day rules (today − 10 years … today, Europe/Warsaw)
+```
+
+The page state is mirrored in the URL (`?dzialki=<id>,<id>&uprawa=<crop>&data=<YYYY-MM-DD>`),
+so a selection can be shared or reopened as a link.
+
+## Data sources (so far)
+
+| Data | Source | Mode | Terms |
+|---|---|---|---|
+| Parcel geometry, ids | [GUGiK ULDK](https://uldk.gugik.gov.pl/) | live | Public data, free of charge |
+| Orthophoto | [GUGiK ORTO WMS](https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/StandardResolution) | live | Public data, free of charge |
+| Parcel boundaries layer | [GUGiK KIEG WMS](https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow) | live | Public data, free of charge |
+| Place names | [OpenFreeMap](https://openfreemap.org/) / OpenStreetMap | live | ODbL (data), free service |
+
+## Libraries
+
+Next.js, React (MIT); MapLibre GL JS (BSD-3-Clause); Turf (MIT); @terraformer/wkt (MIT);
+Atkinson Hyperlegible Next/Mono fonts (SIL OFL 1.1).
+
+## To do for submission (task §4.2)
+
+- [ ] Features: assessment, causes, retention, agrotechnics, irrigation
+- [ ] Data sources with ranges, and which data is live vs prepared (with dates)
+- [ ] AI tools used and how
+- [ ] Licences of data and components (complete the tables above)
+- [ ] Known limitations
+- [ ] How results and recommendations are verified
+- [ ] Scaling: caching, rate limits, update schedule, costs
