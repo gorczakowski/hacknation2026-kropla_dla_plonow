@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { MODULE_LABELS, type AnalysisResponse, type DataStatus } from "@/lib/analysis/contract";
 import { CROPS, isCropId, type CropId } from "@/lib/crops";
@@ -180,10 +181,10 @@ export function App() {
     <div className="app">
       <main className="panel">
         <header className="brand">
-          <BrandMark />
+          <Image className="brand__mark" src="/logo.png" alt="" width={56} height={56} unoptimized />
           <div>
-            <h1 className="brand__name">Zatrzymaj wodę</h1>
-            <p className="brand__lede">Sprawdź, ile wody ma Twoja działka i jak zatrzymać ją w glebie.</p>
+            <h1 className="brand__name">Kropla dla Plonów</h1>
+            <p className="brand__lede">Zadbaj o plony. Sprawdź, czy Twoja uprawa ma dość wody i jak zatrzymać ją w glebie.</p>
           </div>
         </header>
 
@@ -321,18 +322,5 @@ function StepMark({ n, done }: { n: number; done: boolean }) {
         n
       )}
     </span>
-  );
-}
-
-/** A ditch seen from the side, water held back by a gate (zastawka): the product's whole idea. */
-function BrandMark() {
-  return (
-    <svg className="brand__mark" viewBox="0 0 48 48" width="44" height="44" aria-hidden="true">
-      <path d="M4 14 V38 H44 V14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-      <rect x="5.5" y="19" width="17.5" height="17.5" className="brand__water" />
-      <rect x="25" y="31" width="17.5" height="5.5" className="brand__water--low" />
-      <rect x="22.5" y="8" width="3" height="29" rx="1" fill="currentColor" />
-      <rect x="18" y="6" width="12" height="3" rx="1.5" fill="currentColor" />
-    </svg>
   );
 }
