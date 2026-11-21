@@ -16,7 +16,8 @@ export type ModuleId =
   | "soil" // texture, water capacity, IUNG soil drought category (SoilGrids / IUNG)
   | "satellite" // NDVI / NDMI anomalies (Copernicus Sentinel-2)
   | "terrain" // slope, depressions, flow (GUGiK NMT)
-  | "hydro" // watercourses, ditches, water bodies (MPHP / BDOT10k)
+  | "hydro" // watercourses, ditches, water bodies (BDOT10k)
+  | "landcover" // land cover on and around the parcel (BDOT10k)
   | "drought"; // background drought indicators (EDO / IUNG)
 
 /** Names shown to the farmer in the report. */
@@ -27,6 +28,7 @@ export const MODULE_LABELS: Record<ModuleId, string> = {
   satellite: "Dane satelitarne",
   terrain: "Ukształtowanie terenu",
   hydro: "Dane hydrologiczne",
+  landcover: "Użytkowanie terenu",
   drought: "Tło suszowe"
 };
 

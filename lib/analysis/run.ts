@@ -3,6 +3,7 @@ import { earliestAnalysisDate } from "@/lib/dates";
 import type { AnalysisContext, AnalysisModule, DataEnvelope } from "./contract";
 import { droughtModule } from "./modules/drought";
 import { hydroModule } from "./modules/hydro";
+import { landcoverModule } from "./modules/landcover";
 import { meteoModule } from "./modules/meteo";
 import { parcelModule } from "./modules/parcel";
 import { satelliteModule } from "./modules/satellite";
@@ -17,6 +18,7 @@ export const MODULES: AnalysisModule[] = [
   satelliteModule,
   terrainModule,
   hydroModule,
+  landcoverModule,
   droughtModule
 ];
 

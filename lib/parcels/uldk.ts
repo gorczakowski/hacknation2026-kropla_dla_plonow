@@ -36,6 +36,12 @@ async function callUldk(params: Record<string, string>, fields: string[]): Promi
   try {
     const res = await fetchWithTimeout(url, TIMEOUT_MS);
     if (!res.ok) throw new UldkError(`ULDK HTTP ${res.status}`);
+    // When GUGiK throttles an IP it redirects to integracja01.gugik.gov.pl/resp/…,
+    // which answers "0" plus megabytes of filler. Treat that as an outage, not "no parcel".
+    if (res.redirected && new URL(res.url).pathname.startsWith("/resp/")) {
+      await res.body?.cancel();
+      throw new UldkError("ULDK throttled this IP");
+    }
     text = await res.text();
   } catch (error) {
     if (error instanceof UldkError) throw error;

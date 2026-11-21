@@ -642,6 +642,12 @@ select {
   color: var(--ink-2);
 }
 
+.preview__parcel {
+  margin-top: 6px;
+  font-size: var(--t-s);
+  font-weight: 700;
+}
+
 .preview__modules li[data-status="ok"] .preview__status {
   color: var(--water);
   font-weight: 700;
