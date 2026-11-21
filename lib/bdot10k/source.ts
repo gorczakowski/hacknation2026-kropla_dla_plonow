@@ -4,6 +4,8 @@ import path from "node:path";
 import { inflateRawSync } from "node:zlib";
 import { CACHE_DIR, DAY } from "@/lib/server/disk-cache";
 import { fetchOk } from "@/lib/server/http";
+import type { Bbox } from "@/lib/geo/geometry";
+import { queryBbox, type GpkgFeature } from "./gpkg";
 
 /**
  * GUGiK BDOT10k (topographic database 1:10 000), one GeoPackage zip per county
@@ -30,7 +32,7 @@ type Entry = { offset: number; compressedSize: number; method: number };
 type Directory = { entries: Record<string, Entry>; lastModified: string; length: number };
 
 const directories = new Map<string, Promise<Directory>>();
-const inflight = new Map<string, Promise<string>>();
+const inflight = new Map<string, Promise<string | null>>();
 
 const zipUrl = (county: string) => `${BASE}/${county.slice(0, 2)}/${county}_GPKG.zip`;
 
@@ -83,10 +85,11 @@ function directory(county: string, signal: AbortSignal) {
   return dir;
 }
 
-async function downloadLayer(county: string, layer: string, file: string, signal: AbortSignal): Promise<string> {
+/** Downloads one layer; null when the county has no objects of that class (no file in the zip). */
+async function downloadLayer(county: string, layer: string, file: string, signal: AbortSignal): Promise<string | null> {
   const dir = await directory(county, signal);
   const entry = dir.entries[layer];
-  if (!entry) throw new Error(`BDOT10k: brak warstwy ${layer} dla powiatu ${county}`);
+  if (!entry) return null;
   const url = zipUrl(county);
   // Local header (30 B + name + extra) precedes the data; 1 kB of slack covers it.
   const chunk = await range(url, entry.offset, Math.min(dir.length - 1, entry.offset + 30 + 1024 + entry.compressedSize), signal);
@@ -102,7 +105,8 @@ async function downloadLayer(county: string, layer: string, file: string, signal
   return file;
 }
 
-export type LayerFile = { file: string; version: string; fetchedAt: string };
+/** `file` is null when the county has no objects of this class (e.g. no canals). */
+export type LayerFile = { file: string | null; version: string; fetchedAt: string };
 
 /** Path to the county's layer GeoPackage, downloading it first when needed. */
 export async function bdotLayer(county: string, layer: string, signal: AbortSignal): Promise<LayerFile> {
@@ -117,12 +121,20 @@ export async function bdotLayer(county: string, layer: string, signal: AbortSign
       task = downloadLayer(county, layer, file, signal).finally(() => inflight.delete(key));
       inflight.set(key, task);
     }
-    await task;
+    if ((await task) === null) {
+      const dir = await directory(county, signal);
+      return { file: null, version: dir.lastModified, fetchedAt: new Date().toISOString() };
+    }
   }
   const meta = await readFile(`${file}.json`, "utf8")
     .then(t => JSON.parse(t) as { lastModified: string; fetchedAt: string })
     .catch(() => ({ lastModified: "", fetchedAt: new Date().toISOString() }));
   return { file, version: meta.lastModified, fetchedAt: meta.fetchedAt };
+}
+
+/** Features of a layer in a bbox; none when the county lacks the layer. */
+export function queryLayer(layer: LayerFile, bbox: Bbox, columns: string[]): GpkgFeature[] {
+  return layer.file ? queryBbox(layer.file, bbox, columns) : [];
 }
 
 export function formatVersion(lastModified: string) {

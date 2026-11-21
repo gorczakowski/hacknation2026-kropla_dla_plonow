@@ -1,6 +1,5 @@
 import "server-only";
-import { queryBbox } from "@/lib/bdot10k/gpkg";
-import { BDOT_SOURCE, bdotLayer, countyOfParcel, formatVersion } from "@/lib/bdot10k/source";
+import { BDOT_SOURCE, bdotLayer, countyOfParcel, formatVersion, queryLayer } from "@/lib/bdot10k/source";
 import {
   bboxOfPolygons,
   distPointSegment,
@@ -78,7 +77,7 @@ export const landcoverModule: AnalysisModule<LandCoverValue> = {
 
     const patches: Patch[] = [];
     LAYERS.forEach(([, name], i) => {
-      for (const f of queryBbox(files[i].file, window, ["RODZAJ"])) {
+      for (const f of queryLayer(files[i], window, ["RODZAJ"])) {
         if (f.geom.kind !== "polygons") continue;
         patches.push({ label: name(f.props.RODZAJ), box: bboxOfPolygons(f.geom.polygons), polygons: f.geom.polygons });
       }

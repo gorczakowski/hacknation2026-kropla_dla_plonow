@@ -1,5 +1,5 @@
 import "server-only";
-import { fetchJson, HttpError } from "@/lib/server/http";
+import { createLimiter, fetchJson, HttpError } from "@/lib/server/http";
 import type { DailyRecord, MeteoSeries } from "./series";
 
 /**
@@ -40,9 +40,21 @@ function toSeries(body: OpenMeteoResponse, recent: boolean): MeteoSeries {
   return { provider: "open-meteo-era5", lat: body.latitude, lon: body.longitude, elevation: body.elevation ?? null, days };
 }
 
+/** Open-Meteo also caps concurrent requests per IP ("Too many concurrent requests"). */
+const limit = createLimiter(3);
+const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function call(url: string, signal: AbortSignal, timeoutMs: number): Promise<OpenMeteoResponse> {
   try {
-    return await fetchJson<OpenMeteoResponse>(url, { timeoutMs, signal });
+    return await limit(async () => {
+      try {
+        return await fetchJson<OpenMeteoResponse>(url, { timeoutMs, signal });
+      } catch (error) {
+        if (!(error instanceof HttpError && error.status === 429 && /concurrent/i.test(error.body ?? ""))) throw error;
+        await pause(800);
+        return fetchJson<OpenMeteoResponse>(url, { timeoutMs, signal });
+      }
+    });
   } catch (error) {
     if (error instanceof HttpError && error.body) {
       const reason = /"reason"\s*:\s*"([^"]+)"/.exec(error.body)?.[1];

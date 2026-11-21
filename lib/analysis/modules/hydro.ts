@@ -1,6 +1,6 @@
 import "server-only";
-import { queryBbox, type GpkgFeature } from "@/lib/bdot10k/gpkg";
-import { BDOT_SOURCE, bdotLayer, countyOfParcel, formatVersion } from "@/lib/bdot10k/source";
+import type { GpkgFeature } from "@/lib/bdot10k/gpkg";
+import { BDOT_SOURCE, bdotLayer, countyOfParcel, formatVersion, queryLayer } from "@/lib/bdot10k/source";
 import {
   bboxDistance,
   bboxOfPolygons,
@@ -123,12 +123,12 @@ export const hydroModule: AnalysisModule<HydroValue> = {
       county,
       bdotVersion: formatVersion(ditchL.version),
       searchRadiusM: SEARCH_M,
-      ditches: summarizeLines(queryBbox(ditchL.file, search, LINE_COLUMNS), parcel, () => "rów melioracyjny"),
-      watercourses: summarizeLines(queryBbox(riverL.file, search, LINE_COLUMNS), parcel, p =>
+      ditches: summarizeLines(queryLayer(ditchL, search, LINE_COLUMNS), parcel, () => "rów melioracyjny"),
+      watercourses: summarizeLines(queryLayer(riverL, search, LINE_COLUMNS), parcel, p =>
         typeof p.RODZAJ === "string" ? p.RODZAJ : "ciek"
       ),
-      canals: summarizeLines(queryBbox(canalL.file, search, LINE_COLUMNS), parcel, () => "kanał"),
-      waterBodies: summarizeWaterBodies(queryBbox(waterL.file, search, ["RODZAJ", "NAZWA"]), parcel)
+      canals: summarizeLines(queryLayer(canalL, search, LINE_COLUMNS), parcel, () => "kanał"),
+      waterBodies: summarizeWaterBodies(queryLayer(waterL, search, ["RODZAJ", "NAZWA"]), parcel)
     };
 
     return {
