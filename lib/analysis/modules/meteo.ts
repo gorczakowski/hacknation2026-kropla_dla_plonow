@@ -1,5 +1,5 @@
 import "server-only";
-import { addDays, daysBetween, minDate, shiftYears, todayInPoland } from "@/lib/dates";
+import { addDays, daysBetween, minDate, todayInPoland } from "@/lib/dates";
 import { fetchNasaPower } from "@/lib/meteo/nasapower";
 import { fetchEra5, fetchRecent } from "@/lib/meteo/openmeteo";
 import { isComplete, type MeteoSeries } from "@/lib/meteo/series";
@@ -70,8 +70,10 @@ export const meteoModule: AnalysisModule<MeteoValue> = {
     const today = todayInPoland();
     // Whole days only: today's values would still be partly forecast.
     const end = minDate(ctx.asOf, addDays(today, -1));
-    // 10 years back from the analysis day, plus room for the first 90-day window.
-    const start = addDays(shiftYears(ctx.asOf, -10), -95);
+    // Cover both the rolling windows and ten full calendar years for the monthly profile.
+    const rollingStart = addDays(ctx.historyFrom, -95);
+    const calendarStart = `${ctx.historyFrom.slice(0, 4)}-01-01`;
+    const start = minDate(rollingStart, calendarStart);
     const ttl = end >= addDays(today, -10) ? 6 * HOUR : 180 * DAY;
     const notes: string[] = [];
     const sources: DataSource[] = [];
@@ -117,7 +119,7 @@ export const meteoModule: AnalysisModule<MeteoValue> = {
       }
     }
 
-    const summary = summarizeMeteo(series, end);
+    const summary = summarizeMeteo(series, ctx.asOf, end);
     if (!summary) {
       return {
         module: "meteo",

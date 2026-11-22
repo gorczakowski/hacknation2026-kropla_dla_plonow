@@ -9,19 +9,25 @@ import {
   PRACTICE_KIND_LABELS, WATER_SCORE_LABELS, WATER_SCORE_NOTE, WATER_SCORE_SCALE, WATER_UNCERTAINTY_LABELS,
   type AnalysisRequest, type DataEnvelope, type DataStatus, type ModuleId, type ParcelAnalysis, type WaterAssessment
 } from "@/lib/analysis/contract";
+import { planDroughtRecheck, PREPARATION_DAYS } from "@/lib/analysis/drought-recheck";
 import { FUNDING_PAGE, RETENTION_GUIDE } from "@/lib/analysis/retention";
 import type {
   HydroValue,
   LandCoverValue,
   LineFeatureSummary,
+  MeteoMonthlyHistory,
   MeteoValue,
   SatelliteValue,
   SoilValue,
   TerrainValue
 } from "@/lib/analysis/values";
 import { cropLabel } from "@/lib/crops";
-import { formatDatePl } from "@/lib/dates";
+import { formatDatePl, todayInPoland } from "@/lib/dates";
 import { KUS_2016, OPTIMAL_PRECIPITATION, OPTIMAL_PRECIPITATION_MONTHS, SOIL_WATER_RESERVE, type KusSoilCategory } from "@/lib/reference/kus2016";
+import {
+  formatDeficitYears, formatHistoricalBalance, MONTHS, SEASONAL_WATER_COLUMNS, SEASONAL_WATER_MISSING, SEASONAL_WATER_NOTE,
+  SEASONAL_WATER_TITLE, seasonalWaterSummary
+} from "./seasonal-water-balance";
 
 export type SummaryInput = { request: AnalysisRequest; generatedAt: string; results: ParcelAnalysis[] };
 export type FontFiles = { regular: ArrayBuffer; bold: ArrayBuffer };
@@ -53,7 +59,6 @@ const pct = (share: number | null | undefined, digits = 0) => (share === null ||
 const day = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 const range = (from: string, to: string) => `${day(from)} – ${day(to)}`;
 const metres = (v: number | null, radius: number) => (v === null ? `brak do ${num(radius, 0)} m` : `${num(v, 0)} m`);
-const MONTHS = ["", "styczeń", "luty", "marzec", "kwiecień", "maj", "czerwiec", "lipiec", "sierpień", "wrzesień", "październik", "listopad", "grudzień"];
 
 function toBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -357,7 +362,27 @@ function landcoverSection(w: Writer, env: DataEnvelope<LandCoverValue>) {
   );
 }
 
-function assessmentSection(w: Writer, assessment: WaterAssessment) {
+function seasonalWaterSection(w: Writer, parcelLabel: string, history?: MeteoMonthlyHistory) {
+  if (!history?.months.some(month => month.yearsWithData)) {
+    w.heading(SEASONAL_WATER_TITLE);
+    w.text(SEASONAL_WATER_MISSING);
+    return;
+  }
+  w.ensure(68);
+  w.heading(SEASONAL_WATER_TITLE);
+  w.text(`${parcelLabel} · Dane historyczne z lat ${history.fromYear}–${history.toYear}`, { size: 8.5, color: MUTED });
+  const summary = seasonalWaterSummary(history);
+  if (summary) w.text(summary, { bold: true });
+  const monthCells = history.months.map(month => [
+    MONTHS[month.month], formatHistoricalBalance(month.medianBalance), formatDeficitYears(month)
+  ]);
+  w.table([...SEASONAL_WATER_COLUMNS, ...SEASONAL_WATER_COLUMNS], monthCells.slice(0, 6).map((row, i) => [...row, ...monthCells[i + 6]]), {
+    columnStyles: { 0: { fontStyle: "bold" }, 3: { fontStyle: "bold" } }
+  });
+  w.text(SEASONAL_WATER_NOTE, { size: 8.5, color: MUTED });
+}
+
+function assessmentSection(w: Writer, assessment: WaterAssessment, parcelLabel: string, history?: MeteoMonthlyHistory) {
   w.heading("Uzasadnienie oceny warunków wodnych");
   w.text(assessment.summary);
   if (assessment.excessWater) w.text(`${EXCESS_WATER_LABEL}. ${EXCESS_WATER_NOTE}`, { bold: true });
@@ -365,6 +390,7 @@ function assessmentSection(w: Writer, assessment: WaterAssessment) {
     w.text(`Niepewność oceny jest ${WATER_UNCERTAINTY_LABELS[assessment.uncertainty]}.`, { size: 8.5, color: MUTED });
   }
   for (const evidence of assessment.evidence) w.text(`• ${evidence}`, { size: 8.5, indent: 1 });
+  seasonalWaterSection(w, parcelLabel, history);
   if (assessment.score === null) return;
 
   w.heading("Zalecenia retencyjne i agrotechniczne");
@@ -397,7 +423,9 @@ export function buildDataSummaryPdf(jsPDF: typeof JsPdf, autoTable: AutoTable, i
 
   const w = new Writer(doc, autoTable);
   const { request, results } = input;
-  const generated = new Date(input.generatedAt).toLocaleString("pl-PL", { timeZone: "Europe/Warsaw" });
+  const generatedAt = new Date(input.generatedAt);
+  const generated = generatedAt.toLocaleString("pl-PL", { timeZone: "Europe/Warsaw" });
+  const generatedOn = todayInPoland(generatedAt);
 
   w.text("Ocena warunków wodnych", { size: 20, bold: true, gap: 1 });
   w.text(`${formatDatePl(request.date)} · ${cropLabel(request.crop)}`, { size: 10, color: MUTED, gap: 4 });
@@ -421,7 +449,8 @@ export function buildDataSummaryPdf(jsPDF: typeof JsPdf, autoTable: AutoTable, i
 
     w.y += 2;
     w.ensure(36);
-    w.text(`Działka ${p.number}, obręb ${p.precinct}`, { size: 14, bold: true, gap: 1 });
+    const parcelLabel = `Działka ${p.number}, obręb ${p.precinct}`;
+    w.text(parcelLabel, { size: 14, bold: true, gap: 1 });
     w.pairs([
       ["Identyfikator", p.id],
       ["Gmina / powiat / województwo", `${p.commune} / ${p.county} / ${p.voivodeship}`],
@@ -433,7 +462,24 @@ export function buildDataSummaryPdf(jsPDF: typeof JsPdf, autoTable: AutoTable, i
       w.text(`Obserwacje rolnika: ${observations.map(observation => FIELD_OBSERVATIONS[observation]).join(" · ")}.`, { size: 8.5, color: MUTED });
     }
 
-    assessmentSection(w, result.assessment);
+    const history = env<MeteoValue>("meteo")?.value?.monthlyHistory;
+    assessmentSection(w, result.assessment, parcelLabel, history);
+    const score = result.assessment.score;
+    if (score !== null && score >= 4) {
+      const { date, risk } = planDroughtRecheck(generatedOn, history);
+      w.ensure(32);
+      w.heading("Ponowna kontrola działki");
+      w.text(`Sprawdź działkę ponownie do ${formatDatePl(date)}.`, { bold: true });
+      if (risk) {
+        const month = MONTHS[risk.month];
+        w.text(`Najbliższy miesiąc ryzyka według historii działki to ${month} ${risk.year}. Deficyt odnotowano w ${formatDeficitYears(risk)} lat z pełnymi danymi.`);
+        w.text(risk.withLeadTime
+          ? `Termin przypada ${PREPARATION_DAYS} dni przed początkiem tego miesiąca.`
+          : "Miesiąc ryzyka jest blisko lub już trwa, dlatego kontrolę zaplanowano na najbliższy dzień.", { size: 8.5, color: MUTED });
+      } else {
+        w.text("Termin orientacyjny przy braku wyraźnego miesiąca z powtarzalnym deficytem w sezonie od kwietnia do września.", { size: 8.5, color: MUTED });
+      }
+    }
 
     const soil = env<SoilValue>("soil");
     const sections: [ModuleId, string, (e: DataEnvelope<never>) => void][] = [
@@ -443,7 +489,7 @@ export function buildDataSummaryPdf(jsPDF: typeof JsPdf, autoTable: AutoTable, i
       ["terrain", "4. Ukształtowanie terenu", e => terrainSection(w, e as DataEnvelope<TerrainValue>)],
       ["hydro", "5. Wody i rowy melioracyjne", e => hydroSection(w, e as DataEnvelope<HydroValue>)],
       ["landcover", "6. Użytkowanie terenu", e => landcoverSection(w, e as DataEnvelope<LandCoverValue>)],
-      ["drought", "7. Tło suszowe", () => undefined]
+      ["drought", `7. ${MODULE_LABELS.drought}`, () => undefined]
     ];
     for (const [id, title, render] of sections) {
       const e = env<never>(id);

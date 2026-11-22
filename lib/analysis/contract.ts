@@ -29,7 +29,7 @@ export const MODULE_LABELS: Record<ModuleId, string> = {
   terrain: "Ukształtowanie terenu",
   hydro: "Dane hydrologiczne",
   landcover: "Użytkowanie terenu",
-  drought: "Tło suszowe"
+  drought: "Wskaźnik suszy CDI (Copernicus)"
 };
 
 export type DataStatus =

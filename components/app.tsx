@@ -417,7 +417,7 @@ export function App() {
               )}
               {analysis.response.results.map(r => (
                 <div key={r.parcel.properties.id} className="preview__result">
-                  <ParcelWaterResult assessment={r.assessment} parcel={r.parcel.properties} />
+                  <ParcelWaterResult result={r} date={analysis.response.request.date} />
                   <details className="preview__detail">
                     <summary>Źródła danych do analizy</summary>
                     <ul className="preview__modules">

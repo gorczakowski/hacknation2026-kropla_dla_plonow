@@ -1,5 +1,5 @@
-import type { MeteoMonth, MeteoSeason, MeteoValue, MeteoWindow, MeteoYearWindow } from "@/lib/analysis/values";
-import { addDays, minDate, shiftYears } from "@/lib/dates";
+import type { MeteoMonth, MeteoMonthlyHistory, MeteoSeason, MeteoValue, MeteoWindow, MeteoYearWindow } from "@/lib/analysis/values";
+import { addDays, daysBetween, HISTORY_YEARS, minDate, shiftYears } from "@/lib/dates";
 import { isComplete, type DailyRecord, type MeteoSeries } from "./series";
 
 const WINDOWS = [30, 60, 90];
@@ -37,7 +37,7 @@ function accumulate(byDate: Map<string, DailyRecord>, from: string, to: string):
     daysWithData,
     precipitation: r1(precipitation),
     et0: r1(et0),
-    balance: r1(precipitation - et0),
+    balance: precipitation - et0,
     tMean: tN ? r1(tSum / tN) : null,
     hotDays,
     wetDays,
@@ -45,9 +45,39 @@ function accumulate(byDate: Map<string, DailyRecord>, from: string, to: string):
   };
 }
 
+function summarizeMonthlyHistory(days: DailyRecord[], analysisYear: number): MeteoMonthlyHistory {
+  const fromYear = analysisYear - HISTORY_YEARS;
+  const toYear = analysisYear - 1;
+  const byDate = new Map(days.filter(d => !d.recent).map(d => [d.date, d]));
+
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const month = i + 1;
+    const balances: number[] = [];
+    for (let year = fromYear; year <= toYear; year++) {
+      const from = `${year}-${String(month).padStart(2, "0")}-01`;
+      const nextMonth = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+      const to = addDays(nextMonth, -1);
+      const total = accumulate(byDate, from, to);
+      if (total.daysWithData === daysBetween(from, nextMonth)) {
+        // Discard floating-point noise without rounding away small deficits.
+        balances.push(Math.abs(total.balance) < 1e-9 ? 0 : total.balance);
+      }
+    }
+    if (balances.length === 0) return { month, yearsWithData: 0, deficitYears: 0, medianBalance: null };
+    balances.sort((a, b) => a - b);
+    const mid = Math.floor(balances.length / 2);
+    const median = balances.length % 2 ? balances[mid] : (balances[mid - 1] + balances[mid]) / 2;
+    const medianBalance = r1(median) || 0;
+    return { month, yearsWithData: balances.length, deficitYears: balances.filter(balance => balance < 0).length, medianBalance };
+  });
+
+  return { fromYear, toYear, months };
+}
+
 /** Summarises a daily series up to the analysis day; null when there is no usable day. */
-export function summarizeMeteo(series: MeteoSeries, asOf: string): Omit<MeteoValue, "provider" | "gridPoint"> | null {
-  const days = series.days.filter(d => d.date <= asOf);
+export function summarizeMeteo(series: MeteoSeries, asOf: string, through = asOf): Omit<MeteoValue, "provider" | "gridPoint"> | null {
+  const end = minDate(asOf, through);
+  const days = series.days.filter(d => d.date <= end);
   const usable = days.filter(isComplete);
   if (usable.length === 0) return null;
   const byDate = new Map(days.map(d => [d.date, d]));
@@ -56,7 +86,8 @@ export function summarizeMeteo(series: MeteoSeries, asOf: string): Omit<MeteoVal
 
   const windows: MeteoWindow[] = WINDOWS.map(n => {
     const from = addDays(lastDay, -(n - 1));
-    return { days: n, from, to: lastDay, ...accumulate(byDate, from, lastDay) };
+    const total = accumulate(byDate, from, lastDay);
+    return { days: n, from, to: lastDay, ...total, balance: r1(total.balance) };
   });
 
   const sameWindow: MeteoYearWindow[] = [];
@@ -66,7 +97,7 @@ export function summarizeMeteo(series: MeteoSeries, asOf: string): Omit<MeteoVal
     if (from < first) break;
     const t = accumulate(byDate, from, to);
     if (t.daysWithData < SAME_WINDOW_DAYS - 5) continue;
-    sameWindow.push({ year: Number(to.slice(0, 4)), from, to, precipitation: t.precipitation, et0: t.et0, balance: t.balance });
+    sameWindow.push({ year: Number(to.slice(0, 4)), from, to, precipitation: t.precipitation, et0: t.et0, balance: r1(t.balance) });
   }
   const ranked = [...sameWindow].sort((a, b) => a.balance - b.balance);
   const current = sameWindow[0];
@@ -87,7 +118,7 @@ export function summarizeMeteo(series: MeteoSeries, asOf: string): Omit<MeteoVal
       complete: `${y}-09-30` <= lastDay,
       precipitation: t.precipitation,
       et0: t.et0,
-      balance: t.balance,
+      balance: r1(t.balance),
       longestDrySpell: t.longestDrySpell,
       hotDays: t.hotDays
     });
@@ -105,5 +136,6 @@ export function summarizeMeteo(series: MeteoSeries, asOf: string): Omit<MeteoVal
 
   const recentDaysFromForecast = days.filter(d => d.recent && d.date <= lastDay && isComplete(d)).length;
 
-  return { lastDay, recentDaysFromForecast, windows, sameWindow, sameWindowRank, seasons, seasonMonths };
+  const monthlyHistory = summarizeMonthlyHistory(usable, Number(asOf.slice(0, 4)));
+  return { lastDay, recentDaysFromForecast, windows, sameWindow, sameWindowRank, seasons, seasonMonths, monthlyHistory };
 }
