@@ -47,6 +47,19 @@ export type MeteoSeason = {
 
 export type MeteoMonth = { month: string; precipitation: number; et0: number; complete: boolean };
 
+export type MeteoHistoricalMonth = {
+  month: number;
+  yearsWithData: number;
+  deficitYears: number;
+  medianBalance: number | null;
+};
+
+export type MeteoMonthlyHistory = {
+  fromYear: number;
+  toYear: number;
+  months: MeteoHistoricalMonth[];
+};
+
 export type MeteoValue = {
   provider: MeteoProvider;
   gridPoint: { lat: number; lon: number; elevation: number | null };
@@ -63,6 +76,8 @@ export type MeteoValue = {
   seasons: MeteoSeason[];
   /** Months Apr–Sep of the latest season that started on or before the analysis day. */
   seasonMonths: MeteoMonth[];
+  /** Calendar months from the ten years before the analysis year. */
+  monthlyHistory?: MeteoMonthlyHistory;
 };
 
 // ---------- Soil ----------

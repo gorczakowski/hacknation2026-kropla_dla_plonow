@@ -693,6 +693,11 @@ select {
   font-size: var(--t-s);
 }
 
+.water-score__heading {
+  margin: 0;
+  font-size: var(--t-s);
+}
+
 .water-score strong {
   font-size: var(--t-xl);
   line-height: 1.2;
@@ -710,6 +715,60 @@ select {
   background: var(--muted-tint);
   box-shadow: inset 3px 0 0 var(--water);
   font-size: var(--t-s);
+}
+
+.seasonal-water {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0;
+  padding: 8px 0;
+  border-block: 1px solid var(--line);
+  font-size: var(--t-s);
+}
+
+.seasonal-water h4 {
+  margin: 0;
+  font-size: var(--t-m);
+}
+
+.seasonal-water__table {
+  width: 100%;
+  margin: 6px 0;
+  border-collapse: collapse;
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.seasonal-water__table :is(th, td) {
+  padding: 4px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.seasonal-water__table tbody th {
+  font-weight: normal;
+}
+
+.seasonal-water__table td {
+  white-space: nowrap;
+}
+
+.seasonal-water__frequency {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.seasonal-water__frequency meter {
+  width: clamp(1.25rem, 7vw, 3rem);
+}
+
+.seasonal-water__frequency meter::-webkit-meter-optimum-value {
+  background: var(--error);
+}
+
+.seasonal-water__frequency meter::-moz-meter-bar {
+  background: var(--error);
 }
 
 .preview__evidence {

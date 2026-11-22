@@ -8,7 +8,7 @@ irrigation recommendations.
 "Analizuj" fetches weather, soil, satellite, terrain, hydrology and land-cover data for each
 parcel, then shows a 1–5 water-condition score and applicable retention and agrotechnical
 measures. The downloadable PDF starts with the scores for all selected parcels and includes
-the supporting data. The drought background (EDO) module still reports "brak danych".
+the supporting data. Both views show the seasonal water-deficit profile for each parcel.
 
 ## Running
 
@@ -104,6 +104,10 @@ historical days within the last 10 years.
 | Hydro | `hydro.ts` | GUGiK BDOT10k | nearest ditch / watercourse / canal / water body; lengths and counts within 100 and 500 m |
 | Land cover | `landcover.ts` | GUGiK BDOT10k | land-cover shares on the parcel and in a 500 m ring |
 | Drought | `drought.ts` | (EDO CDI, not built) | "brak danych" |
+
+For each calendar month, the seasonal profile compares the ten full calendar years before
+the selected analysis year. It reports the median of monthly P−ET0 and how many years had
+a negative monthly balance among years with complete daily observations for that month.
 
 Fetched data is cached on disk (`.cache/`), so a repeat run for the same parcel and day makes no
 upstream calls. A cold run takes about 3–8 s per parcel.
