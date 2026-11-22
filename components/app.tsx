@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { MODULE_LABELS, type AnalysisResponse, type DataStatus } from "@/lib/analysis/contract";
+import { FIELD_OBSERVATIONS, MODULE_LABELS, WATER_SCORE_NOTE, type AnalysisRequest, type AnalysisResponse, type DataStatus, type FieldObservation } from "@/lib/analysis/contract";
 import { CROPS, isCropId, type CropId } from "@/lib/crops";
 import { earliestAnalysisDate, isValidAnalysisDate, todayInPoland } from "@/lib/dates";
 import type { ParcelFeature, ParcelsResponse, PrecinctFeature, PrecinctResponse } from "@/lib/parcels/types";
@@ -13,6 +13,7 @@ import type { MapFocus } from "./parcel-map";
 import { ParcelSearch } from "./parcel-search";
 import { PlaceSearch } from "./place-search";
 import { SelectedParcels } from "./selected-parcels";
+import { ParcelWaterResult } from "./parcel-water-result";
 
 const ParcelMap = dynamic(() => import("./parcel-map").then(m => m.ParcelMap), {
   ssr: false,
@@ -35,6 +36,8 @@ const STATUS_LABEL: Record<DataStatus, string> = {
   error: "błąd źródła"
 };
 
+const OBSERVATION_OPTIONS = Object.keys(FIELD_OBSERVATIONS) as FieldObservation[];
+
 export function App() {
   const [parcels, setParcels] = useState<ParcelFeature[]>([]);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -45,22 +48,45 @@ export function App() {
   /** Precinct (village) outline shown for a while after a place search. */
   const [area, setArea] = useState<PrecinctFeature | null>(null);
   const [analysis, setAnalysis] = useState<Analysis>({ status: "idle" });
+  const [observations, setObservations] = useState<NonNullable<AnalysisRequest["observations"]>>({});
+  /** Observations are confirmed for one day, so changing the day clears them; say so. */
+  const [observationsCleared, setObservationsCleared] = useState(false);
+  const analysisRequest = useRef<AbortController | null>(null);
   const today = useMemo(() => todayInPoland(), []);
   const cropId = useId();
   const dateId = useId();
 
   const selectedIds = useMemo(() => new Set(parcels.map(p => p.properties.id)), [parcels]);
+  const observationCount = Object.values(observations).reduce((sum, list) => sum + (list?.length ?? 0), 0);
 
   // Bring a fresh result into view (it sits below the button, often off-screen).
   const resultRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (analysis.status !== "done" && analysis.status !== "error") return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    resultRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest" });
+    resultRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: analysis.status === "done" ? "start" : "nearest" });
   }, [analysis.status]);
 
   // Any change of input makes an earlier result stale.
-  useEffect(() => setAnalysis({ status: "idle" }), [parcels, crop, date]);
+  useEffect(() => {
+    setAnalysis({ status: "idle" });
+    return () => analysisRequest.current?.abort();
+  }, [parcels, crop, date, observations]);
+
+  function changeDate(nextDate: string) {
+    if (nextDate === date) return;
+    setDate(nextDate);
+    setObservationsCleared(Object.values(observations).some(list => list?.length));
+    setObservations({});
+  }
+
+  function changeObservation(id: string, observation: FieldObservation, checked: boolean) {
+    setObservationsCleared(false);
+    setObservations(current => {
+      const selected = current[id] ?? [];
+      return { ...current, [id]: checked ? [...selected, observation] : selected.filter(item => item !== observation) };
+    });
+  }
 
   const messageTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const flash = useCallback((text: string | null, ms = 4000) => {
@@ -168,6 +194,12 @@ export function App() {
   const removeParcel = useCallback((id: string) => {
     setParcels(list => list.filter(p => p.properties.id !== id));
     setHighlightedId(h => (h === id ? null : h));
+    setObservations(current => {
+      if (!Object.hasOwn(current, id)) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
   }, []);
 
   const pickAt = useCallback(
@@ -213,18 +245,25 @@ export function App() {
   }
 
   async function analyze() {
+    analysisRequest.current?.abort();
+    const controller = new AbortController();
+    analysisRequest.current = controller;
     setAnalysis({ status: "running" });
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parcelIds: parcels.map(p => p.properties.id), crop, date })
+        body: JSON.stringify({ parcelIds: parcels.map(p => p.properties.id), crop, date, observations })
       });
       const body = (await res.json()) as AnalysisResponse;
+      if (controller.signal.aborted) return;
       if ("error" in body) setAnalysis({ status: "error", message: body.error });
       else setAnalysis({ status: "done", response: body });
     } catch {
-      setAnalysis({ status: "error", message: "Brak połączenia z serwerem. Spróbuj ponownie." });
+      if (!controller.signal.aborted) setAnalysis({ status: "error", message: "Brak połączenia z serwerem. Spróbuj ponownie." });
+    } finally {
+      if (analysisRequest.current === controller) analysisRequest.current = null;
     }
   }
 
@@ -296,11 +335,11 @@ export function App() {
                 value={date}
                 min={earliestAnalysisDate(today)}
                 max={today}
-                onChange={e => setDate(e.target.value)}
+                onChange={e => changeDate(e.target.value)}
                 required
               />
               {date !== today && (
-                <button type="button" className="link-button" onClick={() => setDate(today)}>
+                <button type="button" className="link-button" onClick={() => changeDate(today)}>
                   Dzisiaj
                 </button>
               )}
@@ -308,6 +347,36 @@ export function App() {
             <p className="hint">Domyślnie dzisiaj. Możesz sprawdzić dowolny dzień z ostatnich 10 lat.</p>
           </li>
         </ol>
+
+        {hasParcels && observationsCleared && (
+          <p className="notice" role="status">
+            Zmieniono dzień analizy, więc obserwacje z pola wyczyszczono. Zaznacz je ponownie dla nowego dnia.
+          </p>
+        )}
+        {hasParcels && (
+          <details className="field-observations">
+            <summary>
+              Obserwacje z pola (opcjonalnie)
+              {observationCount > 0 && ` · zaznaczono ${observationCount}`}
+            </summary>
+            <p className="hint">Zaznacz tylko to, co możesz potwierdzić dla wybranego dnia.</p>
+            {parcels.map(({ properties: p }) => (
+              <fieldset key={p.id}>
+                <legend>Działka {p.number}, obręb {p.precinct}</legend>
+                {OBSERVATION_OPTIONS.map(option => (
+                  <label key={option}>
+                    <input
+                      type="checkbox"
+                      checked={observations[p.id]?.includes(option) ?? false}
+                      onChange={e => changeObservation(p.id, option, e.target.checked)}
+                    />
+                    {FIELD_OBSERVATIONS[option]}
+                  </label>
+                ))}
+              </fieldset>
+            ))}
+          </details>
+        )}
 
         <div className="actions">
           <button
@@ -333,36 +402,33 @@ export function App() {
           {analysis.status === "error" && <p className="notice notice--error">{analysis.message}</p>}
           {analysis.status === "done" && (
             <section className="preview" aria-label="Wynik analizy">
-              <h2 className="preview__title">Dane zebrane</h2>
-              <p className="preview__lede">
-                Pobierz zestawienie danych dla {parcelsAccusative(analysis.response.results.length)}: pogoda i bilans
-                wodny z 10 lat, gleba, zdjęcia satelitarne, teren, rowy i wody, użytkowanie terenu. Ocena i
-                rekomendacje pojawią się w kolejnej wersji.
-              </p>
+              <h2 className="preview__title">Ocena warunków wodnych</h2>
+              <p className="preview__lede">{WATER_SCORE_NOTE}</p>
               <button
                 type="button"
                 className="button button--secondary"
                 disabled={pdf === "working"}
                 onClick={() => downloadPdf(analysis.response)}
               >
-                {pdf === "working" ? "Przygotowuję PDF…" : "Pobierz zestawienie (PDF)"}
+                {pdf === "working" ? "Przygotowuję PDF…" : "Pobierz raport (PDF)"}
               </button>
               {pdf === "error" && (
                 <p className="notice notice--error">Nie udało się utworzyć pliku PDF. Spróbuj ponownie.</p>
               )}
               {analysis.response.results.map(r => (
-                <div key={r.parcel.properties.id}>
-                  {analysis.response.results.length > 1 && (
-                    <h3 className="preview__parcel">Działka {r.parcel.properties.number}</h3>
-                  )}
-                  <ul className="preview__modules">
-                    {r.modules.map(m => (
-                      <li key={m.module} data-status={m.status}>
-                        <span>{MODULE_LABELS[m.module]}</span>
-                        <span className="preview__status">{STATUS_LABEL[m.status]}</span>
-                      </li>
-                    ))}
-                  </ul>
+                <div key={r.parcel.properties.id} className="preview__result">
+                  <ParcelWaterResult assessment={r.assessment} parcel={r.parcel.properties} />
+                  <details className="preview__detail">
+                    <summary>Źródła danych do analizy</summary>
+                    <ul className="preview__modules">
+                      {r.modules.map(m => (
+                        <li key={m.module} data-status={m.status}>
+                          <span>{MODULE_LABELS[m.module]}</span>
+                          <span className="preview__status">{STATUS_LABEL[m.status]}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
                 </div>
               ))}
             </section>

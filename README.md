@@ -5,10 +5,10 @@ cadastral parcel, the crop and a day, and get an assessment of the parcel's wate
 the last 10 years, the causes of any shortage, and data-backed retention, agrotechnical and
 irrigation recommendations.
 
-> Status: data layer. Map, parcel search and selection, crop and date inputs work. "Analizuj"
-> fetches weather, soil, satellite, terrain, hydrology and land-cover data for each parcel and
-> offers a PDF data summary. Assessment and recommendations are not built yet; the drought
-> background (EDO) module still reports "brak danych".
+"Analizuj" fetches weather, soil, satellite, terrain, hydrology and land-cover data for each
+parcel, then shows a 1–5 water-condition score and applicable retention and agrotechnical
+measures. The downloadable PDF starts with the scores for all selected parcels and includes
+the supporting data. The drought background (EDO) module still reports "brak danych".
 
 ## Running
 
@@ -18,6 +18,7 @@ Requires Node 22.13+ (BDOT10k GeoPackages are read with the built-in `node:sqlit
 npm install        # also copies the MapLibre worker to public/maplibre
 npm run dev        # http://localhost:3000
 npm run typecheck
+npm test           # scoring and recommendation rules
 npm run build && npm start
 ```
 
@@ -70,7 +71,8 @@ Browser (Next.js page)                         Server (Next.js route handlers)
   crop + day → "Analizuj"             ───────►   POST /api/analyze {parcelIds, crop, date}
                                                       re-fetch parcels from ULDK
                                                       run data modules in parallel → envelopes
-  "Pobierz zestawienie (PDF)"  ◄── envelopes      PDF built in the browser (jsPDF), no re-run
+                                                      assess water conditions and select measures
+  "Pobierz raport (PDF)"       ◄── results        PDF built in the browser (jsPDF), no re-run
 ```
 
 A thin backend is deliberate:
@@ -106,11 +108,52 @@ historical days within the last 10 years.
 Fetched data is cached on disk (`.cache/`), so a repeat run for the same parcel and day makes no
 upstream calls. A cold run takes about 3–8 s per parcel.
 
+### Water-condition score and retention recommendations
+
+The score is a screening heuristic on the selected date. It uses the last complete 30 days
+of precipitation minus reference evapotranspiration (P−ET₀). The weather window must end
+within seven days of the analysis date. The absolute negative balance, in mm, gives the
+base score below. A positive balance has zero climatic deficit for the purposes of the score.
+Light and very light soils hold less water, so they use lower thresholds.
+
+| Climatic deficit (mm) | Score 5 | Score 4 | Score 3 | Score 2 | Score 1 |
+|---|---:|---:|---:|---:|---:|
+| Other soils | <15 | 15 to <35 | 35 to <60 | 60 to <90 | ≥90 |
+| Light or very light soil | <10 | 10 to <25 | 25 to <45 | 45 to <65 | ≥65 |
+
+A fixed deficit means more in April than in a typical July, so the season adjusts the base score
+when at least six years are available. The current 60-day balance is ranked among the same 60-day
+window in earlier years. If it is among the driest 20 % and negative, the score drops one point.
+If it is wetter than 60 % of the years, the score rises one point.
+
+The score describes water shortage only. Farmer-reported persistent ponding is shown separately
+as `Nadmiar wody` and leaves the score unchanged. On annual crops it suggests checking for a compacted
+layer, and on grassland the report adds the payment for retention on permanent grassland.
+Observations are attached to individual parcels on the selected date; changing the date clears
+them and says so. Missing or stale weather data yields `Brak oceny`. The score includes an
+uncertainty label, and the report provides the 60-day balance, earlier 60-day windows and
+usable Sentinel-2 observations where available. The thresholds are prototype settings and
+need calibration against field measurements of root-zone moisture and waterlogging.
+The score uses reference evapotranspiration. Estimating crop-specific water use and irrigation
+amounts requires a crop water balance. [FAO-56, chapter 5](https://www.fao.org/4/X0490E/x0490e0a.htm)
+
+The rule set picks up to three of the ten practices from *Retencja wody na polach uprawnych*
+(22 November 2026, [public/poradnik-retencja-wody.pdf](public/poradnik-retencja-wody.pdf)) using
+the assessment, crop type, parcel data and optional farmer observations. Each recommendation
+provides the evidence, a check or next step, the guide's indicative cost before subsidies with
+its original unit (pp. 2–5), and the matching subsidy where the guide lists one (p. 6). The app
+links each page reference to the guide. Map features can suggest places to inspect. Controlled
+drainage and ponds require field checks before any investment.
+
+The scoring and recommendation rules have unit tests in
+[lib/analysis/water-assessment.test.ts](lib/analysis/water-assessment.test.ts), run with
+`npm test` (Node's built-in test runner, no extra dependencies).
+
 ### Structure
 
 ```
 app/                 page, layout, styles, API routes (api/parcels, api/analyze)
-components/          map, search, selected parcels, app container, PDF data summary
+components/          map, search, selected parcels, water results, PDF report
 lib/parcels/         ULDK client and parcel types
 lib/analysis/        module contract, runner, modules, value types (values.ts)
 lib/meteo/           Open-Meteo and NASA POWER clients, FAO-56 ET0, statistics
@@ -193,7 +236,8 @@ Services: Cloudflare Workers (free plan) hosts the optional Open-Meteo forwarder
 
 ## To do for submission (task §4.2)
 
-- [ ] Features: assessment, causes, retention, agrotechnics, irrigation
+- [x] Water-condition assessment, causes, retention and agrotechnics
+- [ ] Optional crop-specific irrigation guidance
 - [x] Data sources, and which data is live vs prepared (all live so far)
 - [ ] AI tools used and how
 - [ ] Licences of data and components (complete the tables above)

@@ -9,3 +9,6 @@ public/maplibre/
 .DS_Store
 .cache/
 !.env
+
+# Retention guide (kept out of the repo; the app links to it at /poradnik-retencja-wody.pdf)
+public/poradnik-retencja-wody.pdf

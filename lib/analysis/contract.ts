@@ -67,6 +67,68 @@ export type AnalysisRequest = {
   crop: CropId;
   /** Analysis day, YYYY-MM-DD; no data after this day may be used. */
   date: string;
+  /** Farmer-confirmed field observations, by parcel id. */
+  observations?: Partial<Record<string, FieldObservation[]>>;
+};
+
+export const FIELD_OBSERVATIONS = {
+  bareAfterHarvest: "Po zbiorze gleba jest odsłonięta",
+  runoffRills: "Po deszczu widać żłobiny po spływie",
+  lowOrganicMatter: "Badanie gleby wykazało mało materii organicznej",
+  compactedLayer: "Odkrywka potwierdziła zbitą warstwę gleby",
+  ponding: "Na polu długo utrzymują się zastoiska wody",
+  windExposure: "Silny wiatr przesusza odsłonięte pole",
+  activeDrainage: "Dreny lub rów odprowadzają wodę z pola",
+  reliableInflow: "Woda regularnie dopływa do obniżenia"
+} as const;
+
+export type FieldObservation = keyof typeof FIELD_OBSERVATIONS;
+export type WaterScore = 1 | 2 | 3 | 4 | 5;
+
+export const WATER_SCORE_LABELS: Record<WaterScore, string> = {
+  1: "Bardzo słabe",
+  2: "Słabe",
+  3: "Umiarkowane",
+  4: "Dość dobre",
+  5: "Dobre"
+};
+
+export const WATER_SCORE_SCALE = Object.entries(WATER_SCORE_LABELS).map(([score, label]) => `${score} ${label.toLowerCase()}`).join(" · ");
+export const WATER_SCORE_NOTE = "Ocena orientacyjna niedoboru wody na wybrany dzień: bilans pogody z 30 dni na tle tego samego okresu w poprzednich latach i kategoria gleby. Zgłoszone zastoiska pokazujemy osobno jako nadmiar wody. Wilgotność w strefie korzeni wymaga osobnego pomiaru.";
+export const WATER_UNCERTAINTY_LABELS = { medium: "umiarkowana", high: "wysoka" } as const;
+export const EXCESS_WATER_LABEL = "Nadmiar wody";
+export const EXCESS_WATER_NOTE = "Zgłoszono długo utrzymujące się zastoiska. Ocena niedoboru tego nie obejmuje.";
+
+export type RetentionRecommendation = {
+  title: string;
+  kind: "agrotechnical" | "retention";
+  why: string;
+  nextStep: string;
+  /** Indicative cost before subsidies, as given in the guide. */
+  cost: string;
+  sourcePage: number;
+  /** Matching subsidy from the guide's funding page, if any. */
+  funding?: string;
+  needsCheck?: true;
+};
+
+export const PRACTICE_KIND_LABELS: Record<RetentionRecommendation["kind"], string> = {
+  agrotechnical: "Agrotechnika",
+  retention: "Retencja"
+};
+export const FIELD_CHECK_LABEL = "Do sprawdzenia w terenie";
+export const COST_LABEL = "Orientacyjny koszt przed dopłatami";
+export const FUNDING_LABEL = "Dopłaty";
+
+export type WaterAssessment = {
+  /** Water-deficit score; excess water is reported separately in `excessWater`. */
+  score: WaterScore | null;
+  /** The farmer reported persistent ponding. */
+  excessWater: boolean;
+  uncertainty: Exclude<Uncertainty, "low"> | null;
+  summary: string;
+  evidence: string[];
+  recommendations: RetentionRecommendation[];
 };
 
 export type AnalysisContext = {
@@ -88,6 +150,7 @@ export type AnalysisModule<T = unknown> = {
 export type ParcelAnalysis = {
   parcel: ParcelFeature;
   modules: DataEnvelope[];
+  assessment: WaterAssessment;
 };
 
 export type AnalysisResponse =

@@ -1,12 +1,15 @@
 /**
- * The PDF "data summary": every value the data modules fetched for each
- * parcel, with sources, dates and the modules' own limitation notes. No
- * assessment or recommendations yet. Built in the browser from the
- * /api/analyze response, so downloading does not re-run the analysis.
+ * Parcel report, built in the browser from the /api/analyze response.
+ * Downloading uses the same assessment and sources already shown in the app.
  */
 import type { jsPDF as JsPdf } from "jspdf";
 import type { UserOptions } from "jspdf-autotable";
-import { MODULE_LABELS, type AnalysisRequest, type DataEnvelope, type DataStatus, type ModuleId, type ParcelAnalysis } from "@/lib/analysis/contract";
+import {
+  COST_LABEL, EXCESS_WATER_LABEL, EXCESS_WATER_NOTE, FIELD_CHECK_LABEL, FIELD_OBSERVATIONS, FUNDING_LABEL, MODULE_LABELS,
+  PRACTICE_KIND_LABELS, WATER_SCORE_LABELS, WATER_SCORE_NOTE, WATER_SCORE_SCALE, WATER_UNCERTAINTY_LABELS,
+  type AnalysisRequest, type DataEnvelope, type DataStatus, type ModuleId, type ParcelAnalysis, type WaterAssessment
+} from "@/lib/analysis/contract";
+import { FUNDING_PAGE, RETENTION_GUIDE } from "@/lib/analysis/retention";
 import type {
   HydroValue,
   LandCoverValue,
@@ -354,6 +357,34 @@ function landcoverSection(w: Writer, env: DataEnvelope<LandCoverValue>) {
   );
 }
 
+function assessmentSection(w: Writer, assessment: WaterAssessment) {
+  w.heading("Uzasadnienie oceny warunków wodnych");
+  w.text(assessment.summary);
+  if (assessment.excessWater) w.text(`${EXCESS_WATER_LABEL}. ${EXCESS_WATER_NOTE}`, { bold: true });
+  if (assessment.uncertainty) {
+    w.text(`Niepewność oceny jest ${WATER_UNCERTAINTY_LABELS[assessment.uncertainty]}.`, { size: 8.5, color: MUTED });
+  }
+  for (const evidence of assessment.evidence) w.text(`• ${evidence}`, { size: 8.5, indent: 1 });
+  if (assessment.score === null) return;
+
+  w.heading("Zalecenia retencyjne i agrotechniczne");
+  if (!assessment.recommendations.length) {
+    w.text("W dostępnych danych brak podstaw do wskazania konkretnego zabiegu. Obserwacje z pola mogą uzupełnić wynik.");
+  }
+  for (const practice of assessment.recommendations) {
+    w.ensure(30);
+    const kind = PRACTICE_KIND_LABELS[practice.kind];
+    w.text(`${kind}${practice.needsCheck ? ` · ${FIELD_CHECK_LABEL}` : ""}`, { size: 8, color: MUTED, gap: 0.5 });
+    w.sub(practice.title);
+    w.text(practice.why);
+    w.text(practice.nextStep);
+    w.text(`${COST_LABEL}: ${practice.cost} Poradnik, s. ${practice.sourcePage}.`, { size: 8, color: MUTED, gap: practice.funding ? 0.5 : 3 });
+    if (practice.funding) {
+      w.text(`${FUNDING_LABEL}: ${practice.funding} Poradnik, s. ${FUNDING_PAGE}.`, { size: 8, color: MUTED, gap: 3 });
+    }
+  }
+}
+
 // ---------- document ----------
 
 export function buildDataSummaryPdf(jsPDF: typeof JsPdf, autoTable: AutoTable, input: SummaryInput, fonts: FontFiles): JsPdf {
@@ -362,31 +393,34 @@ export function buildDataSummaryPdf(jsPDF: typeof JsPdf, autoTable: AutoTable, i
   doc.addFileToVFS("AtkinsonHyperlegible-Bold.ttf", toBase64(fonts.bold));
   doc.addFont("AtkinsonHyperlegible-Regular.ttf", FONT, "normal");
   doc.addFont("AtkinsonHyperlegible-Bold.ttf", FONT, "bold");
-  doc.setProperties({ title: "Zestawienie danych – Zatrzymaj wodę", creator: "Zatrzymaj wodę (HackNation 2026)" });
+  doc.setProperties({ title: "Ocena warunków wodnych – Zatrzymaj wodę", creator: "Zatrzymaj wodę (HackNation 2026)" });
 
   const w = new Writer(doc, autoTable);
   const { request, results } = input;
   const generated = new Date(input.generatedAt).toLocaleString("pl-PL", { timeZone: "Europe/Warsaw" });
 
-  w.text("Zestawienie danych dla działek", { size: 17, bold: true, gap: 1 });
-  w.text("Zatrzymaj wodę – prototyp, HackNation 2026", { size: 9, color: MUTED, gap: 3 });
-  w.pairs([
-    ["Dzień analizy", formatDatePl(request.date)],
-    ["Uprawa", cropLabel(request.crop)],
-    ["Działki", results.map(r => r.parcel.properties.id).join(", ")],
-    ["Wygenerowano", generated]
-  ]);
-  w.text(
-    "To zestawienie danych pobranych dla działek. Nie zawiera jeszcze oceny sytuacji wodnej ani rekomendacji. Dane pochodzą z modeli, map i zdjęć satelitarnych o różnej rozdzielczości; przy każdej sekcji podano źródło, datę i ograniczenia. Brak danych zaznaczono wprost.",
-    { size: 8.5, color: MUTED, gap: 2 }
-  );
+  w.text("Ocena warunków wodnych", { size: 20, bold: true, gap: 1 });
+  w.text(`${formatDatePl(request.date)} · ${cropLabel(request.crop)}`, { size: 10, color: MUTED, gap: 4 });
+  w.table(["Działka", "Ocena na dzień analizy", "Podstawa oceny"], results.map(({ parcel, assessment }) => [
+    `${parcel.properties.number}, obręb ${parcel.properties.precinct}\n${parcel.properties.id}`,
+    (assessment.score === null ? "Brak oceny" : `${assessment.score}/5\n${WATER_SCORE_LABELS[assessment.score]}`) +
+      (assessment.excessWater ? `\n${EXCESS_WATER_LABEL}` : ""),
+    assessment.summary
+  ]), {
+    rowPageBreak: "avoid",
+    columnStyles: { 0: { cellWidth: 53 }, 1: { cellWidth: 38, fontStyle: "bold", textColor: WATER } }
+  });
+  w.text(WATER_SCORE_SCALE, { size: 8.5, bold: true });
+  w.text(WATER_SCORE_NOTE, { size: 8.5, color: MUTED });
+  w.text(`Wygenerowano ${generated}`, { size: 8, color: MUTED });
 
   results.forEach((result, i) => {
-    if (i > 0) w.newPage();
+    if (i > 0 || results.length > 1) w.newPage();
     const p = result.parcel.properties;
     const env = <T>(id: ModuleId) => result.modules.find(m => m.module === id) as DataEnvelope<T> | undefined;
 
     w.y += 2;
+    w.ensure(36);
     w.text(`Działka ${p.number}, obręb ${p.precinct}`, { size: 14, bold: true, gap: 1 });
     w.pairs([
       ["Identyfikator", p.id],
@@ -394,6 +428,12 @@ export function buildDataSummaryPdf(jsPDF: typeof JsPdf, autoTable: AutoTable, i
       ["Powierzchnia (z geometrii)", `${num(p.areaHa, 2)} ha`],
       ["Punkt odczytu danych punktowych", `${num(p.labelPoint[1], 5)}° N, ${num(p.labelPoint[0], 5)}° E`]
     ]);
+    const observations = request.observations?.[p.id];
+    if (observations?.length) {
+      w.text(`Obserwacje rolnika: ${observations.map(observation => FIELD_OBSERVATIONS[observation]).join(" · ")}.`, { size: 8.5, color: MUTED });
+    }
+
+    assessmentSection(w, result.assessment);
 
     const soil = env<SoilValue>("soil");
     const sections: [ModuleId, string, (e: DataEnvelope<never>) => void][] = [
@@ -446,6 +486,7 @@ export function buildDataSummaryPdf(jsPDF: typeof JsPdf, autoTable: AutoTable, i
     `Literatura: ${KUS_2016.citation} (${KUS_2016.url}); Allen R.G., Pereira L.S., Raes D., Smith M. (1998), Crop evapotranspiration, FAO Irrigation and Drainage Paper 56.`,
     { size: 7.5, color: MUTED }
   );
+  w.text(`Zalecane praktyki i koszty na podstawie „${RETENTION_GUIDE}”, s. 1–6.`, { size: 7.5, color: MUTED });
 
   // Footer on every page.
   const pages = doc.getNumberOfPages();
@@ -454,7 +495,7 @@ export function buildDataSummaryPdf(jsPDF: typeof JsPdf, autoTable: AutoTable, i
     doc.setFont(FONT, "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(...MUTED);
-    doc.text(`Zatrzymaj wodę · zestawienie danych · dzień analizy ${day(request.date)}`, M, PAGE_H - M + 4);
+    doc.text(`Zatrzymaj wodę · warunki wodne · dzień analizy ${day(request.date)}`, M, PAGE_H - M + 4);
     doc.text(`${i} / ${pages}`, PAGE_W - M, PAGE_H - M + 4, { align: "right" });
   }
   return doc;
@@ -469,5 +510,5 @@ export async function downloadDataSummary(input: SummaryInput) {
     fetch("/fonts/AtkinsonHyperlegible-Bold.ttf").then(r => r.arrayBuffer())
   ]);
   const doc = buildDataSummaryPdf(jsPDF, autoTable as AutoTable, input, { regular, bold });
-  doc.save(`zestawienie-danych-${input.request.date}.pdf`);
+  doc.save(`raport-warunki-wodne-${input.request.date}.pdf`);
 }

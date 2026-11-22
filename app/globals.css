@@ -633,9 +633,124 @@ select {
 }
 
 .preview__parcel {
-  margin-top: 6px;
+  margin: 0;
+  font-size: var(--t-m);
+  font-weight: 700;
+}
+
+.field-observations,
+.preview__result {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--surface);
+}
+
+.field-observations summary,
+.preview__detail summary {
+  cursor: pointer;
   font-size: var(--t-s);
   font-weight: 700;
+}
+
+.field-observations fieldset {
+  min-inline-size: 0;
+  margin: 12px 0 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: var(--t-s);
+}
+
+.field-observations legend {
+  font-weight: 700;
+}
+
+.field-observations label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.field-observations input {
+  margin: 0;
+  flex: none;
+  accent-color: var(--water);
+}
+
+.preview__result {
+  display: grid;
+  gap: 6px;
+}
+
+.water-score {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--water-deep);
+  font-size: var(--t-s);
+}
+
+.water-score strong {
+  font-size: var(--t-xl);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.water-score[data-score="1"],
+.water-score[data-score="2"] {
+  color: var(--error);
+}
+
+.water-excess {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--muted-tint);
+  box-shadow: inset 3px 0 0 var(--water);
+  font-size: var(--t-s);
+}
+
+.preview__evidence {
+  margin: 6px 0 0;
+  padding-inline-start: 20px;
+  font-size: var(--t-s);
+}
+
+.preview__evidence li + li {
+  margin-top: 4px;
+}
+
+.preview__subtitle {
+  margin: 6px 0 0;
+  font-size: var(--t-m);
+}
+
+.preview__recommendations {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preview__recommendations li {
+  display: grid;
+  gap: 3px;
+  border-left: 2px solid var(--line-strong);
+  padding-left: 10px;
+  font-size: var(--t-s);
+}
+
+.preview__recommendations h5 {
+  margin: 0;
+  font-size: var(--t-s);
+}
+
+.preview__practice-type {
+  font-size: var(--t-xs);
+  color: var(--ink-2);
 }
 
 .preview__modules li[data-status="ok"] .preview__status {
@@ -754,5 +869,6 @@ select {
 
 /* Keeps the scrolled-to result clear of the sticky button bar. */
 .result-slot {
+  scroll-margin-top: 16px;
   scroll-margin-bottom: 120px;
 }
